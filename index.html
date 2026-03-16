@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>温馨文案合理分布铺满屏幕</title>
+    <style>
+        /* 全局重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            background: #fdfbf7; /* 柔和米色背景 */
+            min-height: 100vh;
+            overflow: hidden; /* 防止滚动条 */
+        }
+
+        /* 掉落弹窗基础样式 - 固定尺寸方便空间计算 */
+       .drop-popup {
+            position: fixed;
+            top: -100px; /* 初始在屏幕顶部外 */
+            width: 260px; /* 固定宽度，避免尺寸不一导致重叠 */
+            height: 80px; /* 固定高度 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(145deg, #ffffff, #fff9f0);
+            padding: 15px 20px;
+            border-radius: 16px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            z-index: 1000;
+            cursor: move;
+            user-select: none;
+            animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+            animation-fill-mode: forwards;
+        }
+
+        /* 文案样式 */
+       .drop-text {
+            font-size: 16px;
+            color: #5c4b3a;
+            line-height: 1.4;
+            font-weight: 500;
+        }
+
+        /* 关闭按钮 */
+       .drop-close {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            font-size: 14px;
+            color: #b0a695;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+       .drop-close:hover {
+            color: #6d5d4b;
+        }
+    </style>
+</head>
+<body>
+
+<script>
+    // 文案库
+    const messages = [
+       
+        "出门带伞，别淋雨",
+        "穿舒服鞋，不累脚",
+        "要按时吃饭",
+        "天热多补水，多喝水哦～",
+        "天冷了，多穿衣",
+        "空调别对头吹",
+        "冬天睡前泡泡脚",
+        "水果洗干净再吃，多吃水果",
+        "午餐吃热的，吃热的",
+        "备点零食饿了垫",
+        "火锅别太辣",
+        "买杯热饮暖手",
+        "过马路看红绿灯",
+        "手机及时充电",
+        "别熬夜，早点休息，睡个好觉",
+        "久坐记得活动",
+        "整理桌面，心情好",
+        "做件喜欢的小事",
+        "你已经很棒啦，别苛责自己",
+        "别给自己压力",
+        "累了就歇，别硬撑",
+        "不开心就跟我说，我站在你这边",
+        "你的努力我都看见",
+        "别多想啦",
+        "别焦虑，事情会慢慢解决的",
+        "慢慢做，不着急",
+        "没做好，下次再试",
+        "加油，你一定能做好的！",
+        "今天也要加油哦！",
+        "保持微笑吖",
+        "保持好心情",
+        "要天天开心吖～",
+        "今天也要过得开心",
+        "难过了就抱抱自己",
+        "emo 了，睡一觉就好",
+        "压力大的话，出去散散步吧",
+        "愿你所有烦恼都消失",
+        "别纠结过去",
+        "你比想象的更坚强",
+        "等待不被辜负",
+        "情绪最重要",
+        "你值得被世界温柔以待",
+        "你值得被好好爱着",
+        "路过风景能心动，抬头见好天气",
+        "愿你常感温暖",
+        "愿你笑容常在",
+        "顺顺利利，平安喜乐",
+        "梦想成真",
+        "开启美好一天！",
+        "早安，开启元气满满的一天",
+         "李欣琳"
+    ];
+
+    // 核心配置（可自定义）
+    const CONFIG = {
+        popupWidth: 260,    // 弹窗固定宽度（和CSS一致）
+        popupHeight: 80,    // 弹窗固定高度（和CSS一致）
+        gap: 20,            // 弹窗之间的最小间距
+        minDropDuration: 2, // 最小掉落时长（秒）
+        maxDropDuration: 6, // 最大掉落时长（秒）
+        maxDelay: 3,        // 最大延迟（秒）
+        randomOffset: 15    // 网格基础上的随机偏移（避免过于整齐）
+    };
+
+    // 已分配的弹窗位置数组（用于碰撞检测）
+    let allocatedPositions = [];
+
+    // 生成随机数
+    function getRandom(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+
+    // 碰撞检测：检查新位置是否和已分配位置重叠
+    function isOverlap(newX, newY) {
+        for (let pos of allocatedPositions) {
+            const x1 = newX - CONFIG.gap;
+            const y1 = newY - CONFIG.gap;
+            const x2 = newX + CONFIG.popupWidth + CONFIG.gap;
+            const y2 = newY + CONFIG.popupHeight + CONFIG.gap;
+
+            const posX1 = pos.x - CONFIG.gap;
+            const posY1 = pos.y - CONFIG.gap;
+            const posX2 = pos.x + CONFIG.popupWidth + CONFIG.gap;
+            const posY2 = pos.y + CONFIG.popupHeight + CONFIG.gap;
+
+            // 矩形碰撞检测公式
+            if (!(x2 < posX1 || x1 > posX2 || y2 < posY1 || y1 > posY2)) {
+                return true; // 重叠
+            }
+        }
+        return false; // 不重叠
+    }
+
+    // 计算网格布局的合理位置（核心：避免重叠）
+    function getValidPosition() {
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+        
+        // 计算每行/每列能放多少个弹窗（含间距）
+        const cols = Math.floor((screenWidth - CONFIG.gap) / (CONFIG.popupWidth + CONFIG.gap));
+        const rows = Math.floor((screenHeight - CONFIG.gap) / (CONFIG.popupHeight + CONFIG.gap));
+        
+        // 先按网格生成候选位置，再随机选 + 小偏移
+        let validX, validY;
+        let attempts = 0;
+        const maxAttempts = 100; // 防止无限循环
+
+        while (attempts < maxAttempts) {
+            // 随机选网格位置
+            const colIndex = Math.floor(getRandom(0, cols));
+            const rowIndex = Math.floor(getRandom(0, rows));
+            
+            // 网格基础位置
+            let gridX = CONFIG.gap + colIndex * (CONFIG.popupWidth + CONFIG.gap);
+            let gridY = CONFIG.gap + rowIndex * (CONFIG.popupHeight + CONFIG.gap);
+            
+            // 加小范围随机偏移，避免完全整齐
+            gridX += getRandom(-CONFIG.randomOffset, CONFIG.randomOffset);
+            gridY += getRandom(-CONFIG.randomOffset, CONFIG.randomOffset);
+            
+            // 边界校验：确保弹窗在屏幕内
+            gridX = Math.max(CONFIG.gap, Math.min(gridX, screenWidth - CONFIG.popupWidth - CONFIG.gap));
+            gridY = Math.max(CONFIG.gap, Math.min(gridY, screenHeight - CONFIG.popupHeight - CONFIG.gap));
+            
+            // 碰撞检测：不重叠则使用该位置
+            if (!isOverlap(gridX, gridY)) {
+                validX = gridX;
+                validY = gridY;
+                break;
+            }
+            
+            attempts++;
+        }
+
+        // 如果网格位置不够（弹窗数量超网格），则在空白区随机找位置
+        if (!validX) {
+            do {
+                validX = getRandom(CONFIG.gap, screenWidth - CONFIG.popupWidth - CONFIG.gap);
+                validY = getRandom(CONFIG.gap, screenHeight - CONFIG.popupHeight - CONFIG.gap);
+            } while (isOverlap(validX, validY) && attempts < maxAttempts);
+        }
+
+        // 记录已分配位置
+        allocatedPositions.push({ x: validX, y: validY });
+        return { x: validX, y: validY };
+    }
+
+    // 创建单个掉落弹窗
+    function createDropPopup(text) {
+        const popup = document.createElement('div');
+        popup.className = 'drop-popup';
+
+        // 获取合理的最终位置（无重叠）
+        const finalPos = getValidPosition();
+
+        // 随机掉落时长和延迟
+        const randomDuration = getRandom(CONFIG.minDropDuration, CONFIG.maxDropDuration);
+        const randomDelay = getRandom(0, CONFIG.maxDelay);
+
+        // 动态生成掉落动画
+        const animationKeyframes = `
+            @keyframes drop-${Date.now()} {
+                0% {
+                    top: -100px;
+                    left: ${finalPos.x}px; /* 水平位置固定，只掉落垂直方向 */
+                    opacity: 0;
+                    transform: rotate(0deg);
+                }
+                20% {
+                    opacity: 1;
+                }
+                100% {
+                    top: ${finalPos.y}px; /* 最终垂直位置 */
+                    left: ${finalPos.x}px;
+                    opacity: 1;
+                    transform: rotate(${getRandom(-1, 1)}deg); /* 轻微旋转 */
+                }
+            }
+        `;
+
+        // 插入动画样式
+        const style = document.createElement('style');
+        style.innerHTML = animationKeyframes;
+        document.head.appendChild(style);
+
+        // 绑定动画
+        popup.style.animationName = `drop-${Date.now()}`;
+        popup.style.animationDuration = `${randomDuration}s`;
+        popup.style.animationDelay = `${randomDelay}s`;
+
+        // 创建关闭按钮
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'drop-close';
+        closeBtn.textContent = '×';
+        closeBtn.addEventListener('click', () => {
+            // 移除时从已分配位置数组删除
+            allocatedPositions = allocatedPositions.filter(pos => 
+                pos.x!== finalPos.x || pos.y!== finalPos.y
+            );
+            popup.remove();
+        });
+
+        // 创建文案元素
+        const textEl = document.createElement('div');
+        textEl.className = 'drop-text';
+        textEl.textContent = text;
+
+        // 组装弹窗
+        popup.appendChild(closeBtn);
+        popup.appendChild(textEl);
+        document.body.appendChild(popup);
+
+        // 可拖动功能
+        makeDraggable(popup, finalPos);
+    }
+
+    // 弹窗可拖动（拖动后更新位置，避免后续重叠）
+    function makeDraggable(element, originalPos) {
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        element.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            offsetX = e.clientX - element.getBoundingClientRect().left;
+            offsetY = e.clientY - element.getBoundingClientRect().top;
+            element.style.zIndex = 1001;
+            element.style.cursor = 'grabbing';
+            element.style.animation = 'none'; // 停止动画
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            // 计算新位置并限制在屏幕内
+            const newX = Math.max(CONFIG.gap, Math.min(e.clientX - offsetX, window.innerWidth - CONFIG.popupWidth - CONFIG.gap));
+            const newY = Math.max(CONFIG.gap, Math.min(e.clientY - offsetY, window.innerHeight - CONFIG.popupHeight - CONFIG.gap));
+            
+            element.style.left = `${newX}px`;
+            element.style.top = `${newY}px`;
+
+            // 实时更新已分配位置
+            allocatedPositions = allocatedPositions.map(pos => 
+                (pos.x === originalPos.x && pos.y === originalPos.y)? { x: newX, y: newY } : pos
+            );
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            element.style.cursor = 'move';
+        });
+    }
+
+    // 批量创建弹窗
+    function startDropPopups() {
+        // 重置已分配位置
+        allocatedPositions = [];
+        // 按文案数量创建弹窗
+        messages.forEach(msg => {
+            createDropPopup(msg);
+        });
+    }
+
+    // 窗口大小变化时重新布局
+    window.addEventListener('resize', () => {
+        // 清空现有弹窗
+        document.querySelectorAll('.drop-popup').forEach(popup => popup.remove());
+        // 重新创建
+        startDropPopups();
+    });
+
+    // 页面加载完成后启动
+    window.addEventListener('load', startDropPopups);
+</script>
+</body>
+</html>
